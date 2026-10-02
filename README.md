@@ -2,9 +2,6 @@
 
 A Layer-4 load balancer written from scratch with Python sockets. It spreads client connections across three backend servers, detects when one crashes, and routes around it. The client never sees an error. A live web dashboard lets you crash servers, switch algorithms and watch the traffic move. Every claim can be verified in Wireshark.
 
-> Computer Networks (DCN) lab mini-project · V-Lab reference: IIIT Hyderabad CN Virtual Lab, *File Transfer using TCP*
-
-![Dashboard screenshot](docs/dashboard.png)
 
 ## Highlights
 
