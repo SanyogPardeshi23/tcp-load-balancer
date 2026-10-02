@@ -109,8 +109,8 @@ tcp-load-balancer/
 ├── captures/
 │   └── sample_capture_reference.pcap
 ├── docs/
-│   └── dashboard.png
-└── CLAUDE.md                    # setup & verification checklist for Claude Code
+    └── dashboard.png
+
 ```
 
 ## How it works
