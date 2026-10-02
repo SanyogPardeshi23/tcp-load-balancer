@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Load Balancer Dashboard</title>
+<style>
+  /* Theme D: "Signal Brutal" (neo-brutalist). Cream page, 2px ink borders, hard offset
+     shadows, square corners, mustard accent. Offline-safe: system fonts only, no external loads.
+     The chart/card code reads --s1 --s2 --s3 --good --critical --surface --axis --grid --muted --ink-2
+     by name, so those names must stay. */
+  :root {
+    color-scheme: light;
+    --page: #F3ECDD;
+    --page-dot: transparent;
+    --surface: #FFFDF7;
+    --ink: #1B1B1B;
+    --ink-2: #4A4339;
+    --muted: #5E564A;
+    --grid: #E6DCC8;
+    --axis: #1B1B1B;
+    --line: #1B1B1B;
+    --shadow-c: #1B1B1B;
+    --track: #EDE3CF;
+    --head-bg: #FFFDF7;
+    --head-ink: #1B1B1B;
+    --head-ink-2: #4A4339;
+    --acc: #E9C46A;
+    --acc-ink: #1B1B1B;
+    --acc-wash: rgba(233,196,106,0.45);
+    --btn-bg: #E9C46A;
+    --btn-ink: #1B1B1B;
+    --s1: #3A6EA5;   /* web-1 */
+    --s2: #E76F51;   /* web-2 */
+    --s3: #2A9D8F;   /* web-3 */
+    --good: #1D7A3A;
+    --good-ink: #1D7A3A;
+    --good-wash: #E3F1E6;
+    --critical: #C8352B;
+    --critical-ink: #FFFFFF;
+    --critical-wash: #FBE6E3;
+    --bw: 2px;
+    --sh: 4px 4px 0 var(--shadow-c);
+    --sh-sm: 3px 3px 0 var(--shadow-c);
+    --sh-lift: 6px 6px 0 var(--shadow-c);
+    --f-display: "Arial Black", "Segoe UI Black", "Helvetica Neue", Arial, sans-serif;
+    --f-body: "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: Consolas, "Cascadia Mono", "SF Mono", Menlo, monospace;
+    --ease: cubic-bezier(.2,.8,.2,1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #1E1B18; --surface: #2A2622; --ink: #F3ECDD; --ink-2: #C9BFAE; --muted: #A89E8C; --grid: #3A352F; --axis: #F3ECDD;
+      --line: #F3ECDD; --shadow-c: #F3ECDD; --track: #3A352F; --head-bg: #2A2622; --head-ink: #F3ECDD; --head-ink-2: #C9BFAE;
+      --acc-wash: rgba(233,196,106,0.25); --s1: #3987E5; --s2: #D95926; --s3: #199E70;
+      --good: #4CC27A; --good-ink: #4CC27A; --good-wash: rgba(76,194,122,0.12); --critical: #F0605D; --critical-ink: #1B1B1B; --critical-wash: rgba(240,96,93,0.14);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #1E1B18; --surface: #2A2622; --ink: #F3ECDD; --ink-2: #C9BFAE; --muted: #A89E8C; --grid: #3A352F; --axis: #F3ECDD;
+    --line: #F3ECDD; --shadow-c: #F3ECDD; --track: #3A352F; --head-bg: #2A2622; --head-ink: #F3ECDD; --head-ink-2: #C9BFAE;
+    --acc-wash: rgba(233,196,106,0.25); --s1: #3987E5; --s2: #D95926; --s3: #199E70;
+    --good: #4CC27A; --good-ink: #4CC27A; --good-wash: rgba(76,194,122,0.12); --critical: #F0605D; --critical-ink: #1B1B1B; --critical-wash: rgba(240,96,93,0.14);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background-color: var(--page); color: var(--ink);
+         background-image: radial-gradient(var(--page-dot) 1.2px, transparent 1.3px); background-size: 18px 18px;
+         font: 14px/1.45 var(--f-body); }
+  .wrap { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 48px; }
+  h1 { font: 900 24px/1.1 var(--f-display); margin: 0; letter-spacing: -0.01em; text-transform: uppercase; }
+  h2 { font: 700 12.5px/1.2 var(--mono); margin: 0 0 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink); }
+  .sub { color: var(--head-ink-2); margin-top: 6px; max-width: 70ch; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .card { background: var(--surface); border: var(--bw) solid var(--line); border-radius: 0; padding: 16px; box-shadow: var(--sh); min-width: 0; }
+  .row { display: grid; gap: 20px; margin-top: 20px; }
+  :focus-visible { outline: 3px solid var(--s1); outline-offset: 3px; }
+
+  /* header: an ink block with the sunflower title */
+  header { background: var(--head-bg); color: var(--head-ink); border: var(--bw) solid var(--line); box-shadow: var(--sh);
+           padding: 18px 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
+  header .mono { color: var(--head-ink); }
+  .hright { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 2px solid var(--head-ink);
+          background: transparent; font: 700 12px/1 var(--mono); color: var(--head-ink); text-transform: uppercase; letter-spacing: .04em; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); position: relative; }
+  .dot.live::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid currentColor; color: inherit; opacity: 0; }
+  .seg { display: inline-flex; border: 2px solid var(--head-ink); background: var(--surface); }
+  .seg button { border: 0; background: transparent; color: var(--ink); padding: 8px 12px; font: 700 12.5px/1 var(--f-body); cursor: pointer;
+                transition: background .2s var(--ease), color .2s var(--ease); }
+  .seg button + button { border-left: 2px solid var(--line); }
+  .seg button:hover { background: var(--track); }
+  .seg button[aria-pressed="true"] { background: var(--acc); color: var(--acc-ink); }
+  .seg button:disabled { cursor: wait; opacity: .6; }
+  .iconbtn { border: 2px solid var(--head-ink); background: transparent; color: var(--head-ink); padding: 6px 10px; cursor: pointer;
+             font: 700 14px/1 var(--f-body); }
+  .iconbtn:hover { background: var(--head-ink); color: var(--head-bg); }
+
+  /* KPI tiles: pop colours, ink text in both themes */
+  .kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .kpi { color: var(--ink); transition: transform .25s var(--ease), box-shadow .25s var(--ease), background-color .3s var(--ease); }
+  .kpi.alert { background: var(--critical); color: var(--critical-ink); }
+  .kpi:hover { transform: translate(-3px, -3px); box-shadow: var(--sh-lift); }
+  .kpi .label { font: 700 11.5px/1.2 var(--mono); text-transform: uppercase; letter-spacing: .07em; color: var(--ink-2); }
+  .kpi.alert .label { color: inherit; }
+  .kpi .value { font: 900 32px/1 var(--f-display); margin-top: 10px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .kpi .note { font-size: 12px; margin-top: 6px; color: var(--ink-2); }
+  .kpi.alert .note { color: inherit; }
+
+  /* backend cards */
+  .backends { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .be { position: relative; transition: transform .25s var(--ease), box-shadow .25s var(--ease), border-color .3s var(--ease), background-color .3s var(--ease); }
+  .be::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 8px; background: var(--c); border-bottom: var(--bw) solid var(--line); }
+  .be:hover { transform: translate(-3px, -3px); box-shadow: var(--sh-lift); }
+  .be.down { border-color: var(--critical); background: repeating-linear-gradient(135deg, var(--surface) 0 14px, var(--critical-wash) 14px 28px); }
+  .be.down::before { background: repeating-linear-gradient(135deg, var(--critical) 0 10px, var(--ink) 10px 20px); }
+  .be-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-top: 10px; }
+  .be-name { font: 900 22px/1 var(--f-display); display: flex; align-items: center; gap: 10px; text-transform: uppercase; }
+  .swatch { width: 14px; height: 14px; background: var(--c); border: 2px solid var(--line); display: inline-block; flex: none; }
+  .be-meta { color: var(--ink-2); margin-top: 6px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; font: 900 12px/1 var(--mono); border: 2px solid var(--line);
+           white-space: nowrap; letter-spacing: .05em; transition: background-color .3s var(--ease), color .3s var(--ease); }
+  .badge.up { color: var(--good-ink); background: var(--good-wash); border-color: var(--good-ink); }
+  .badge.down { color: var(--critical); background: var(--critical-wash); border-color: var(--critical); }
+  .badge.unknown { color: var(--muted); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 16px 0 12px; }
+  .stat .k { color: var(--ink-2); font: 700 10.5px/1.2 var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+  .stat .v { font: 900 18px/1.2 var(--f-display); font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .share { height: 12px; background: var(--track); border: 2px solid var(--line); overflow: hidden; margin-bottom: 6px; }
+  .share > span { display: block; height: 100%; background: var(--c); transition: width .6s var(--ease); }
+  .share-l { color: var(--ink-2); font-size: 12px; }
+  .be-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 8px; }
+  .proc { font: 700 12px/1 var(--mono); color: var(--ink-2); text-transform: uppercase; }
+  .btn { border: var(--bw) solid var(--line); background: var(--surface); color: var(--ink); padding: 9px 14px; font: 800 13px/1 var(--f-body);
+         cursor: pointer; box-shadow: var(--sh-sm); transition: transform .12s var(--ease), box-shadow .12s var(--ease), background-color .2s; }
+  .btn:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--shadow-c); }
+  .btn:active { transform: translate(3px, 3px); box-shadow: none; }
+  .btn.danger { color: var(--critical); border-color: var(--critical); }
+  .btn.primary { background: var(--btn-bg); color: var(--btn-ink); }
+  .btn:disabled { opacity: .6; cursor: wait; transform: none; box-shadow: var(--sh-sm); }
+
+  /* state-change motion */
+  @keyframes jolt { 0%,100% { transform: none } 15% { transform: translate(-8px, 0) rotate(-1deg) } 30% { transform: translate(7px, 0) rotate(1deg) }
+                    45% { transform: translate(-5px, 0) } 60% { transform: translate(4px, 0) } 75% { transform: translate(-2px, 0) } }
+  @keyframes revive { 0% { transform: scale(.96) } 60% { transform: scale(1.03) } 100% { transform: none } }
+  @keyframes ping { 0% { opacity: .9; transform: scale(.6) } 100% { opacity: 0; transform: scale(1.9) } }
+  @keyframes rowIn { from { background: var(--acc-wash); } to { background: transparent; } }
+  @keyframes slideIn { from { transform: translateX(-10px); background: var(--acc-wash); } to { transform: none; background: transparent; } }
+  @keyframes toastIn { from { transform: translateY(16px) rotate(-2deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes hit { 0% { box-shadow: var(--sh-sm); } 30% { box-shadow: 0 0 0 6px var(--c), var(--sh-sm); } 100% { box-shadow: var(--sh-sm); } }
+  .be.jolt { animation: jolt .6s var(--ease); }
+  .be.revive { animation: revive .5s var(--ease); }
+  .dot.live::after { animation: ping 1.6s ease-out infinite; }
+
+  /* packet flow stage */
+  .flow-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .flow-head h2 { margin: 0; }
+  .stage { position: relative; display: grid; grid-template-columns: 1fr 1.1fr 1fr; align-items: center; gap: 12px; margin-top: 14px; min-height: 230px; }
+  .wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .node { position: relative; z-index: 1; background: var(--surface); border: var(--bw) solid var(--line); box-shadow: var(--sh-sm); padding: 10px 12px;
+          display: flex; flex-direction: column; gap: 2px; justify-self: center; width: min(100%, 200px); transition: background-color .3s var(--ease), opacity .3s; }
+  .node b { font: 900 15px/1.1 var(--f-display); text-transform: uppercase; }
+  .node span { font: 12px/1.2 var(--mono); color: var(--ink-2); }
+  .node.lb { background: var(--acc); color: var(--acc-ink); width: min(100%, 220px); padding: 14px 16px; }
+  .node.lb span { color: var(--acc-ink); opacity: .85; }
+  .be-col { display: flex; flex-direction: column; gap: 14px; justify-self: center; width: min(100%, 200px); }
+  .be-col .node { width: 100%; border-left: 10px solid var(--c); }
+  .be-col .node.hit { animation: hit .45s var(--ease); }
+  .be-col .node.down { opacity: .55; background: repeating-linear-gradient(135deg, var(--surface) 0 8px, var(--critical-wash) 8px 16px); }
+  .be-col .node.down b::after { content: " ✕"; color: var(--critical); }
+  .pkt { position: absolute; left: 0; top: 0; width: 12px; height: 12px; margin: -6px 0 0 -6px; background: var(--c); border: 2px solid var(--line);
+         z-index: 2; pointer-events: none; will-change: transform; }
+  .flow-legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink-2); font-size: 12px; margin-top: 10px; }
+
+  /* main grid */
+  .main { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font: 700 12px/1 var(--mono); color: var(--ink-2); text-transform: uppercase; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 18px; height: 4px; background: var(--c); display: inline-block; }
+  .legend i.tri { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 10px solid var(--critical); background: none; }
+  .chart-box { position: relative; margin-top: 8px; }
+  svg.chart { display: block; width: 100%; height: 280px; cursor: crosshair; }
+  .tip { position: absolute; pointer-events: none; background: var(--surface); border: var(--bw) solid var(--line); box-shadow: var(--sh-sm);
+         padding: 8px 10px; font-size: 12.5px; min-width: 160px; display: none; z-index: 5; }
+  .tip .t { font: 700 11.5px/1.3 var(--mono); text-transform: uppercase; color: var(--ink-2); margin-bottom: 4px; }
+  .tip .r { display: flex; justify-content: space-between; gap: 12px; }
+  .tip .r b { font-variant-numeric: tabular-nums; }
+  .tip .sw { display: inline-block; width: 10px; height: 10px; margin-right: 6px; background: var(--c); border: 1.5px solid var(--line); }
+  .hint { color: var(--ink-2); font-size: 12.5px; margin-top: 8px; }
+
+  /* controls */
+  .ctl + .ctl { border-top: var(--bw) solid var(--line); margin-top: 16px; padding-top: 16px; }
+  .ctl-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .switch { position: relative; width: 58px; height: 30px; background: var(--track); border: var(--bw) solid var(--line); cursor: pointer;
+            box-shadow: var(--sh-sm); transition: background-color .25s var(--ease); }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; background: var(--ink);
+                   transition: transform .25s var(--ease); }
+  .switch[aria-checked="true"] { background: var(--good); }
+  .switch[aria-checked="true"]::after { transform: translateX(28px); background: var(--surface); }
+  #trafficTxt { font: 800 13px/1 var(--f-body); text-transform: uppercase; }
+  input[type=range] { flex: 1; min-width: 120px; accent-color: var(--ink); }
+  input[type=number] { width: 78px; padding: 7px 8px; border: var(--bw) solid var(--line); background: var(--surface); color: var(--ink);
+                       font: 700 13px/1 var(--mono); box-shadow: var(--sh-sm); }
+  label.small { font: 700 11.5px/1 var(--mono); color: var(--ink-2); display: flex; align-items: center; gap: 6px; text-transform: uppercase; }
+  .bars { margin-top: 12px; display: grid; gap: 8px; }
+  .bar { display: grid; grid-template-columns: 52px 1fr 76px; align-items: center; gap: 8px; font: 700 12px/1 var(--mono); }
+  .bar .track { height: 16px; background: var(--track); border: 2px solid var(--line); overflow: hidden; }
+  .bar .fill { height: 100%; background: var(--c); width: 0; transition: width .7s var(--ease); }
+  .bar .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .burst-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+  .burst-stats .k { color: var(--ink-2); font: 700 10.5px/1.2 var(--mono); text-transform: uppercase; }
+  .burst-stats .v { font: 900 17px/1.2 var(--f-display); font-variant-numeric: tabular-nums; margin-top: 3px; }
+  .clients { margin-top: 10px; display: grid; gap: 6px; font-size: 12.5px; }
+  .clients div { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 2px dashed var(--grid); }
+  .running { background: repeating-linear-gradient(90deg, var(--btn-bg) 0 12px, var(--ink-2) 12px 24px) !important; background-size: 48px 100% !important;
+             animation: march .6s linear infinite; }
+  @keyframes march { to { background-position: 48px 0; } }
+
+  /* lists */
+  .lists { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .log { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; }
+  .log li { display: grid; grid-template-columns: 92px 24px 1fr; gap: 6px; padding: 7px 4px; border-bottom: 2px dashed var(--grid); font-size: 12.5px; }
+  .log li.new { animation: slideIn .7s var(--ease); }
+  .log li:last-child { border-bottom: 0; }
+  .log .time { color: var(--ink-2); font-family: var(--mono); font-size: 11.5px; padding-top: 1px; }
+  .ic { font-weight: 900; text-align: center; }
+  .ic.up { color: var(--good-ink); } .ic.down, .ic.crash, .ic.drop { color: var(--critical); }
+  .ic.retry { color: var(--s1); } .ic.info { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; color: var(--ink); font: 700 11px/1.2 var(--mono); text-transform: uppercase; letter-spacing: .05em;
+       padding: 0 6px 8px 0; border-bottom: var(--bw) solid var(--line); }
+  td { padding: 7px 6px 7px 0; border-bottom: 2px dashed var(--grid); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.new td { animation: rowIn .9s var(--ease); }
+  td.num, th.num { text-align: right; }
+  .tag { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+  .empty { color: var(--ink-2); font-size: 12.5px; padding: 10px 0; }
+
+  /* wireshark */
+  .ws { grid-template-columns: minmax(0, 1fr); }
+  .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; }
+  .f { border: 2px solid var(--line); padding: 12px; display: flex; flex-direction: column; gap: 6px; background: var(--surface);
+       transition: transform .15s var(--ease), box-shadow .15s var(--ease); }
+  .f:hover { transform: translate(-2px, -2px); box-shadow: var(--sh-sm); }
+  .f-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .f code { font-family: var(--mono); font-size: 12.5px; font-weight: 700; overflow-wrap: anywhere; min-width: 0; }
+  .f p { margin: 0; color: var(--ink-2); font-size: 12.5px; }
+  .f button { flex: none; border: 2px solid var(--line); background: var(--acc); color: var(--acc-ink); font: 800 11px/1 var(--mono);
+              padding: 5px 8px; cursor: pointer; text-transform: uppercase; }
+  .f button:hover { background: var(--track); }
+
+  .offline { display: none; margin-top: 16px; padding: 12px 14px; border: var(--bw) solid var(--critical); background: var(--critical-wash);
+             color: var(--critical); font-weight: 700; box-shadow: var(--sh-sm); }
+
+  /* toasts */
+  .toasts { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px;
+            z-index: 50; width: min(360px, calc(100vw - 32px)); pointer-events: none; }
+  .toast { background: var(--surface); color: var(--ink); border: var(--bw) solid var(--line); box-shadow: var(--sh); padding: 10px 14px;
+           display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: start; font-size: 13px; animation: toastIn .35s var(--ease); }
+  .toast b { font: 900 18px/1 var(--f-display); text-align: center; }
+  .toast.down b, .toast.crash b { color: var(--critical); }
+  .toast.up b { color: var(--good-ink); }
+  .toast.out { transition: opacity .3s, transform .3s; opacity: 0; transform: translateX(20px); }
+
+  @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 980px) { .backends, .main, .lists { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 640px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .stage { grid-template-columns: 0.9fr 1fr 1fr; gap: 8px; }
+    .node { padding: 8px; } .node b { font-size: 12px; } .node span { font-size: 10.5px; }
+    .kpi .value { font-size: 28px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>TCP Load Balancer &middot; Live Dashboard</h1>
+      <div class="sub">Clients connect to one virtual address <span class="mono" id="vip">127.0.0.1:8080</span>; the balancer spreads connections over 3 backends and routes around failures.</div>
+    </div>
+    <div class="hright">
+      <span class="pill"><span class="dot" id="lbDot"></span><span id="lbText">connecting&hellip;</span></span>
+      <div class="seg" role="group" aria-label="Scheduling algorithm" id="algoSeg">
+        <button data-algo="rr">Round robin</button>
+        <button data-algo="least">Least connections</button>
+        <button data-algo="hash">Source-IP hash</button>
+      </div>
+      <button class="iconbtn" id="themeBtn" title="Toggle light / dark">&#9681;</button>
+    </div>
+  </header>
+  <div class="offline" id="offline">Can't reach dashboard.py. Is it still running? Start it with <span class="mono">python dashboard.py</span>.</div>
+
+  <section class="row kpis">
+    <div class="card kpi" id="tileOk"><div class="label">Requests served</div><div class="value" id="kOk">0</div><div class="note">since last reset</div></div>
+    <div class="card kpi" id="tileFail"><div class="label">Failed requests</div><div class="value" id="kFail">0</div><div class="note">client saw an error</div></div>
+    <div class="card kpi"><div class="label">Availability</div><div class="value" id="kAvail">&ndash;</div><div class="note">served &divide; total</div></div>
+    <div class="card kpi"><div class="label">Throughput</div><div class="value" id="kRps">&ndash;</div><div class="note">req/s, last 10 s</div></div>
+    <div class="card kpi"><div class="label">Avg latency</div><div class="value" id="kLat">&ndash;</div><div class="note">ms, last 10 s</div></div>
+  </section>
+
+  <section class="row backends" id="backends"></section>
+
+  <section class="row">
+    <div class="card">
+      <div class="flow-head">
+        <h2>Packet flow &middot; live</h2>
+        <span class="hint" style="margin:0">Each square is one real TCP connection: client &rarr; balancer (leg 1) &rarr; backend (leg 2)</span>
+      </div>
+      <div class="stage" id="stage">
+        <svg class="wires" id="wires" aria-hidden="true"></svg>
+        <div class="node client" id="nClient"><b>Client</b><span id="nClientTxt">traffic off</span></div>
+        <div class="node lb" id="nLB"><b>Balancer</b><span id="nLBTxt">127.0.0.1:8080</span></div>
+        <div class="be-col" id="beCol">
+          <div class="node" id="n-web-1" style="--c: var(--s1)"><b>web-1</b><span>:9001</span></div>
+          <div class="node" id="n-web-2" style="--c: var(--s2)"><b>web-2</b><span>:9002</span></div>
+          <div class="node" id="n-web-3" style="--c: var(--s3)"><b>web-3</b><span>:9003 &middot; slow</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="row main">
+    <div class="card">
+      <div class="chart-head">
+        <h2 style="margin:0">Requests per second, by backend &middot; last 60 s</h2>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="chart-box" id="chartBox">
+        <svg class="chart" id="chart" role="img" aria-label="Requests per second per backend over the last 60 seconds"></svg>
+        <div class="tip" id="tip"></div>
+      </div>
+      <div class="hint">Live traffic only (burst tests are reported separately). Kill a backend: its line drops to zero while the others absorb the load, and failed requests stay at 0.</div>
+    </div>
+
+    <div class="card">
+      <div class="ctl">
+        <h2>Live traffic</h2>
+        <div class="ctl-row">
+          <button class="switch" id="trafficSw" role="switch" aria-checked="false" aria-label="Live traffic on or off"></button>
+          <span id="trafficTxt">Off</span>
+        </div>
+        <div class="ctl-row" style="margin-top:12px">
+          <label class="small" for="rate">Rate</label>
+          <input type="range" id="rate" min="1" max="20" step="1" value="4">
+          <span class="mono" id="rateTxt">4 req/s</span>
+        </div>
+      </div>
+      <div class="ctl">
+        <h2>Burst test</h2>
+        <div class="ctl-row">
+          <label class="small">Requests <input type="number" id="bn" value="60" min="1" max="2000"></label>
+          <label class="small">Concurrency <input type="number" id="bc" value="6" min="1" max="32"></label>
+          <button class="btn primary" id="burstBtn">Run</button>
+        </div>
+        <div id="burstOut"><div class="hint">Run the same burst under each algorithm and compare throughput. Least connections avoids the slow web-3.</div></div>
+      </div>
+      <div class="ctl" id="clientsCtl" style="display:none">
+        <h2>Sticky sessions (source-IP hash)</h2>
+        <div class="hint" id="clientsHint" style="margin-top:0">Each simulated client IP always lands on the same backend.</div>
+        <div class="clients" id="clients"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="row lists">
+    <div class="card">
+      <h2>Health &amp; failover events</h2>
+      <ul class="log" id="events"></ul>
+    </div>
+    <div class="card">
+      <h2>Latest connections through the balancer</h2>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Time</th><th>Client (IP:port)</th><th>Backend</th><th class="num">Bytes &uarr;/&darr;</th><th class="num">ms</th></tr></thead>
+        <tbody id="conns"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="row ws">
+    <div class="card">
+      <h2>Wireshark: capture this demo</h2>
+      <div class="hint" style="margin:-4px 0 14px">Interface: <b>Adapter for loopback traffic capture</b> (Windows/Npcap) or <b>lo</b> (Linux). Capture filter: <span class="mono">tcp port 8080 or tcp portrange 9001-9003</span></div>
+      <div class="filters" id="filters"></div>
+    </div>
+  </section>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+const BACKEND_VARS = { "web-1": "--s1", "web-2": "--s2", "web-3": "--s3" };
+const NAMES = ["web-1", "web-2", "web-3"];
+const $ = (id) => document.getElementById(id);
+const cssVar = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let STATE = null, busy = false;
+
+/* ---------------- API helpers (unchanged) ---------------- */
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  return r.json();
+}
+async function poll() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    STATE = await r.json();
+    $("offline").style.display = "none";
+    render(STATE);
+  } catch (e) {
+    $("offline").style.display = "block";
+    $("lbDot").style.background = cssVar("--critical");
+    $("lbDot").classList.remove("live");
+    $("lbText").textContent = "dashboard offline";
+  }
+}
+setInterval(poll, 500);
+poll();
+
+/* ---------------- helpers ---------------- */
+function fmtBytes(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v; else if (k === "style") e.setAttribute("style", v); else e.setAttribute(k, v);
+  }
+  for (const k of kids) e.append(k);
+  return e;
+}
+/* Colour cache: the chart redraws every frame, so read CSS variables once per poll / theme change, not per frame. */
+let COL = {};
+function readColors() {
+  COL = { s1: cssVar("--s1"), s2: cssVar("--s2"), s3: cssVar("--s3"), good: cssVar("--good"), critical: cssVar("--critical"),
+          surface: cssVar("--surface"), axis: cssVar("--axis"), grid: cssVar("--grid"), muted: cssVar("--muted"), ink2: cssVar("--ink-2") };
+}
+readColors();
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { readColors(); if (STATE) render(STATE); });
+const colOf = (n) => COL[BACKEND_VARS[n].slice(2)];
+
+/* Number tween: shows the same final text as before, just counts toward it. */
+function tween(node, to, fmt) {
+  if (typeof to !== "number" || !isFinite(to)) { node._v = undefined; node.textContent = to; return; }
+  const from = typeof node._v === "number" ? node._v : to;
+  node._v = to;
+  cancelAnimationFrame(node._raf);
+  if (REDUCED || from === to) { node.textContent = fmt(to); return; }
+  const t0 = performance.now(), dur = 450;
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+    node.textContent = fmt(p === 1 ? to : from + (to - from) * e);
+    if (p < 1) node._raf = requestAnimationFrame(step);
+  };
+  node._raf = requestAnimationFrame(step);
+}
+
+/* ---------------- render ---------------- */
+function render(s) {
+  readColors();
+  // header
+  $("vip").textContent = s.lb.vip;
+  $("lbDot").style.background = s.lb.up ? cssVar("--good") : cssVar("--critical");
+  $("lbDot").style.color = s.lb.up ? cssVar("--good") : cssVar("--critical");
+  $("lbDot").classList.toggle("live", !!s.lb.up);
+  $("lbText").textContent = s.lb.up ? `balancer up · health check every ${s.lb.interval}s` : "balancer down";
+  for (const b of $("algoSeg").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String(b.dataset.algo === s.lb.algo));
+    b.disabled = busy;
+  }
+  // KPIs (same values and formats as before, now animated)
+  const t = s.traffic;
+  tween($("kOk"), t.ok, v => Math.round(v).toLocaleString());
+  tween($("kFail"), t.fail, v => Math.round(v).toLocaleString());
+  $("tileFail").classList.toggle("alert", t.fail > 0);
+  if (t.availability == null) tween($("kAvail"), "–");
+  else { const d = t.availability === 100 ? 0 : 2; tween($("kAvail"), t.availability, v => v.toFixed(d) + "%"); }
+  if (t.rps_10s) tween($("kRps"), t.rps_10s, v => v.toFixed(1)); else tween($("kRps"), "–");
+  if (t.avg_latency_10s == null) tween($("kLat"), "–"); else tween($("kLat"), t.avg_latency_10s, v => v.toFixed(1));
+  // traffic control (don't fight the user while dragging)
+  $("trafficSw").setAttribute("aria-checked", String(t.running));
+  $("trafficTxt").textContent = t.running ? `On · ${t.rate} req/s` : "Off";
+  if (document.activeElement !== $("rate")) { $("rate").value = t.rate; $("rateTxt").textContent = t.rate + " req/s"; }
+
+  renderBackends(s);
+  setChartData(s.series);
+  renderFlow(s);
+  renderEvents(s.events);
+  renderConns(s.connections);
+  renderBurst(s.burst);
+  renderClients(s);
+}
+
+/* Backend cards are built once and then updated in place, so CSS transitions
+   (share bar, badge, state) can run and buttons don't vanish under the cursor. */
+const CARDS = {};
+const LATEST = {};
+function buildCard(b) {
+  const v = {};
+  const stat = (key, label) => { v[key] = el("div", { class: "v" }, "0"); return el("div", { class: "stat" }, el("div", { class: "k" }, label), v[key]); };
+  const badge = el("span", { class: "badge unknown" }, "? UNKNOWN");
+  const fill = el("span", { style: "width:0%" });
+  const shareL = el("div", { class: "share-l" }, "0% of requests in the last 60 s");
+  const proc = el("span", { class: "proc" }, "");
+  const btn = el("button", { class: "btn" }, "");
+  btn.onclick = async () => {
+    const cur = LATEST[b.name] || b;
+    btn.disabled = true;
+    try { await post(`/api/backend/${cur.port}/${cur.process ? "stop" : "start"}`); }
+    finally { btn.disabled = false; poll(); }
+  };
+  const root = el("div", { class: "card be", style: `--c: var(${BACKEND_VARS[b.name]})` },
+    el("div", { class: "be-head" },
+      el("div", {},
+        el("div", { class: "be-name" }, el("span", { class: "swatch" }), `${b.name}`),
+        el("div", { class: "be-meta mono" }, `127.0.0.1:${b.port}` + (b.delay ? ` · +${b.delay} ms delay (slow)` : ""))),
+      badge),
+    el("div", { class: "stats" }, stat("active", "Active"), stat("total", "Total"), stat("failed", "Failed connects"), stat("bytes", "Bytes out")),
+    el("div", { class: "share" }, fill),
+    shareL,
+    el("div", { class: "be-foot" }, proc, btn));
+  root.addEventListener("animationend", () => root.classList.remove("jolt", "revive"));
+  $("backends").append(root);
+  return { root, badge, fill, shareL, proc, btn, v, state: null };
+}
+function renderBackends(s) {
+  const recent = Object.fromEntries(NAMES.map(n => [n, 0]));
+  for (const row of s.series) for (const n of NAMES) recent[n] += row[n];
+  const recentTotal = NAMES.reduce((a, n) => a + recent[n], 0);
+  for (const b of s.backends) {
+    LATEST[b.name] = b;
+    const c = CARDS[b.name] || (CARDS[b.name] = buildCard(b));
+    const st = b.state === "UP" ? "up" : b.state === "DOWN" ? "down" : "unknown";
+    if (c.state && c.state !== st && !REDUCED) {
+      c.root.classList.remove("jolt", "revive");
+      void c.root.offsetWidth;                       // restart the animation
+      if (st === "down") c.root.classList.add("jolt");
+      if (st === "up" && c.state === "down") c.root.classList.add("revive");
+    }
+    c.state = st;
+    c.root.classList.toggle("down", st === "down");
+    c.badge.className = "badge " + st;
+    c.badge.textContent = st === "up" ? "✓ UP" : st === "down" ? "✕ DOWN" : "? UNKNOWN";
+    tween(c.v.active, b.active, v => String(Math.round(v)));
+    tween(c.v.total, b.total, v => String(Math.round(v)));
+    tween(c.v.failed, b.failed, v => String(Math.round(v)));
+    tween(c.v.bytes, b.bytes_out, v => fmtBytes(Math.round(v)));
+    const share = recentTotal ? Math.round(100 * recent[b.name] / recentTotal) : 0;
+    c.fill.style.width = share + "%";
+    c.shareL.textContent = `${share}% of requests in the last 60 s`;
+    c.proc.textContent = b.process ? "● process running" : "○ process stopped";
+    if (!c.btn.disabled) {
+      c.btn.className = "btn" + (b.process ? " danger" : "");
+      c.btn.textContent = b.process ? "Kill process" : "Start process";
+    }
+  }
+}
+
+/* ---------------- chart (smooth scrolling, monotone curves) ---------------- */
+function niceMax(v) { if (v <= 4) return 4; const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p; return 10 * p; }
+function renderLegend() {
+  const items = NAMES.map(n => el("span", { style: `--c: var(${BACKEND_VARS[n]})` }, el("i"), n));
+  items.push(el("span", {}, el("i", { class: "tri" }), "failed"));
+  $("legend").replaceChildren(...items);
+}
+renderLegend();
+
+/* Monotone cubic (Fritsch–Carlson): smooth, but never overshoots below 0 or above a peak. */
+function monoPath(pts) {
+  const n = pts.length; if (n < 2) return "";
+  const dx = [], dy = [], m = [], t = new Array(n);
+  for (let i = 0; i < n - 1; i++) { dx[i] = pts[i + 1][0] - pts[i][0]; dy[i] = pts[i + 1][1] - pts[i][1]; m[i] = dy[i] / dx[i]; }
+  t[0] = m[0]; t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+    const a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b;
+    if (h > 9) { const k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+  }
+  let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const h = dx[i] / 3;
+    d += `C${(pts[i][0] + h).toFixed(1)} ${(pts[i][1] + t[i] * h).toFixed(1)} ${(pts[i + 1][0] - h).toFixed(1)} ${(pts[i + 1][1] - t[i + 1] * h).toFixed(1)} ${pts[i + 1][0].toFixed(1)} ${pts[i + 1][1].toFixed(1)}`;
+  }
+  return d;
+}
+
+let chartSeries = null, lastBucket = null, shiftAt = 0, yMaxCur = 4, chartGeom = null, hoverIdx = null, lastDraw = 0, tipKey = "";
+function setChartData(series) {
+  const lt = series.length ? series[series.length - 1].t : null;
+  if (lt !== lastBucket) { lastBucket = lt; shiftAt = performance.now(); }
+  chartSeries = series;
+  if (REDUCED) drawChart(performance.now());
+}
+function renderChart(series) { setChartData(series); drawChart(performance.now()); }   // kept for compatibility
+
+function drawChart(now) {
+  const series = chartSeries; if (!series || !series.length) return;
+  const svg = $("chart");
+  const W = svg.clientWidth || 700, H = 280;
+  const m = { l: 40, r: 64, t: 14, b: 28 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b, len = series.length;
+  const target = niceMax(Math.max(1, ...series.flatMap(r => NAMES.map(n => r[n]))));
+  yMaxCur = REDUCED ? target : yMaxCur + (target - yMaxCur) * 0.15;
+  if (Math.abs(target - yMaxCur) < 0.01) yMaxCur = target;
+  const frac = REDUCED ? 0 : Math.min(1, Math.max(0, (now - shiftAt) / 1000));
+  const x = i => m.l + ((i - frac) / (len - 1)) * iw;
+  const y = v => m.t + ih - (v / yMaxCur) * ih;
+  chartGeom = { series, x, m, iw, W, frac, len };
+  const ns = "http://www.w3.org/2000/svg";
+  const g = (tag, attrs) => { const e = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const kids = [];
+  const defs = g("defs", {}), clip = g("clipPath", { id: "plotClip" });
+  clip.append(g("rect", { x: m.l, y: m.t - 6, width: iw + 2, height: ih + 12 })); defs.append(clip); kids.push(defs);
+  // grid + y ticks (labels are the target scale; lines glide while it changes)
+  for (let i = 0; i <= 4; i++) {
+    const v = target * i / 4, yy = y(v);
+    if (yy < m.t - 1 || yy > m.t + ih + 1) continue;
+    kids.push(g("line", { x1: m.l, x2: W - m.r, y1: yy, y2: yy, stroke: i === 0 ? COL.axis : COL.grid, "stroke-width": i === 0 ? 2 : 1, "stroke-dasharray": i === 0 ? "" : "4 4" }));
+    const tx = g("text", { x: m.l - 8, y: yy + 4, "text-anchor": "end", "font-size": 11, "font-weight": 700, fill: COL.muted, "font-family": "Consolas, monospace" });
+    tx.textContent = Number.isInteger(v) ? v : v.toFixed(1); kids.push(tx);
+  }
+  for (const sAgo of [60, 45, 30, 15, 0]) {
+    const tx = g("text", { x: sAgo === 0 ? W - m.r : m.l + ((60 - sAgo) / 60) * iw, y: H - 8, "text-anchor": sAgo === 0 ? "end" : sAgo === 60 ? "start" : "middle",
+                            "font-size": 11, "font-weight": 700, fill: COL.muted, "font-family": "Consolas, monospace" });
+    tx.textContent = sAgo === 0 ? "now" : `−${sAgo}s`; kids.push(tx);
+  }
+  const plot = g("g", { "clip-path": "url(#plotClip)" });
+  const last = {};
+  for (const n of NAMES) {
+    const pts = series.map((r, i) => [x(i), y(r[n])]);
+    plot.append(g("path", { d: monoPath(pts), fill: "none", stroke: colOf(n), "stroke-width": 3, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    last[n] = pts[len - 1];
+  }
+  // live endpoints with a soft pulse
+  const pulse = REDUCED ? 0 : (Math.sin(now / 260) + 1) / 2;
+  for (const n of NAMES) {
+    const [ex, ey] = last[n];
+    plot.append(g("circle", { cx: ex, cy: ey, r: 6 + pulse * 4, fill: colOf(n), opacity: 0.18 }));
+    plot.append(g("circle", { cx: ex, cy: ey, r: 4.5, fill: colOf(n), stroke: COL.surface, "stroke-width": 2 }));
+  }
+  series.forEach((r, i) => {
+    if (r.fail > 0) {
+      const cx = x(i), cy = m.t + ih - 2;
+      plot.append(g("path", { d: `M${cx - 6} ${cy} L${cx + 6} ${cy} L${cx} ${cy - 11} Z`, fill: COL.critical, stroke: COL.surface, "stroke-width": 1.5 }));
+    }
+  });
+  kids.push(plot);
+  // direct labels at the right end, nudged apart so they never overlap
+  const order = NAMES.slice().sort((a, b) => last[b][1] - last[a][1]);
+  let prev = m.t + ih + 14;
+  for (const n of order) {
+    const yy = Math.min(last[n][1], prev - 15); prev = yy;
+    const tx = g("text", { x: W - m.r + 10, y: yy + 4, "font-size": 12, "font-weight": 700, fill: COL.ink2, "font-family": "Consolas, monospace" });
+    tx.textContent = n; kids.push(tx);
+  }
+  if (hoverIdx != null && hoverIdx < len) {
+    const hx = x(hoverIdx);
+    kids.push(g("line", { x1: hx, x2: hx, y1: m.t, y2: m.t + ih, stroke: COL.axis, "stroke-width": 2 }));
+    for (const n of NAMES) kids.push(g("rect", { x: hx - 5, y: y(series[hoverIdx][n]) - 5, width: 10, height: 10, fill: colOf(n), stroke: COL.axis, "stroke-width": 2 }));
+    const key = hoverIdx + ":" + series[hoverIdx].t;
+    if (key !== tipKey) { tipKey = key; showTip(hoverIdx); } else positionTip(hoverIdx);
+  }
+  svg.replaceChildren(...kids);
+}
+function frame(now) {
+  if (now - lastDraw > 33) { lastDraw = now; drawChart(now); }
+  requestAnimationFrame(frame);
+}
+if (!REDUCED) requestAnimationFrame(frame);
+
+$("chart").addEventListener("mousemove", (ev) => {
+  if (!chartGeom) return;
+  const r = $("chart").getBoundingClientRect();
+  const px = (ev.clientX - r.left) * (chartGeom.W / r.width);
+  const i = Math.round(((px - chartGeom.m.l) / chartGeom.iw) * (chartGeom.len - 1) + chartGeom.frac);
+  hoverIdx = Math.max(0, Math.min(chartGeom.len - 1, i));
+  if (REDUCED) drawChart(performance.now());
+});
+$("chart").addEventListener("mouseleave", () => { hoverIdx = null; tipKey = ""; $("tip").style.display = "none"; if (REDUCED) drawChart(performance.now()); });
+
+function showTip(i) {
+  const r = chartGeom.series[i], tip = $("tip");
+  const ago = chartGeom.series.length - 1 - i;
+  const rows = NAMES.map(n => el("div", { class: "r" }, el("span", {}, el("span", { class: "sw", style: `--c: var(${BACKEND_VARS[n]})` }), n), el("b", {}, String(r[n]))));
+  rows.push(el("div", { class: "r" }, el("span", {}, "failed"), el("b", { style: r.fail ? `color:${COL.critical}` : "" }, String(r.fail))));
+  tip.replaceChildren(el("div", { class: "t" }, ago === 0 ? "this second" : `${ago} s ago`), ...rows);
+  tip.style.display = "block";
+  positionTip(i);
+}
+function positionTip(i) {
+  const tip = $("tip"), box = $("chartBox").getBoundingClientRect(), svgR = $("chart").getBoundingClientRect();
+  const px = chartGeom.x(i) * (svgR.width / chartGeom.W);
+  const left = px + 16 + tip.offsetWidth > box.width ? px - tip.offsetWidth - 16 : px + 16;
+  tip.style.left = left + "px"; tip.style.top = "10px";
+}
+window.addEventListener("resize", () => { drawChart(performance.now()); layoutWires(); });
+
+/* ---------------- packet flow ---------------- */
+/* Each new entry in /api/state's connection list becomes one square travelling client → balancer → backend. */
+const seenConn = new Set();
+let flowPrimed = false;
+function center(elm, side) {
+  const s = $("stage").getBoundingClientRect(), r = elm.getBoundingClientRect();
+  return [side === "l" ? r.left - s.left : side === "r" ? r.right - s.left : r.left - s.left + r.width / 2, r.top - s.top + r.height / 2];
+}
+function layoutWires() {
+  const svg = $("wires"), s = $("stage").getBoundingClientRect();
+  svg.setAttribute("viewBox", `0 0 ${s.width} ${s.height}`);
+  const ns = "http://www.w3.org/2000/svg", ink = cssVar("--line");
+  const line = (a, b, dashed) => { const p = document.createElementNS(ns, "path");
+    const mx = (a[0] + b[0]) / 2;
+    p.setAttribute("d", `M${a[0]} ${a[1]} C${mx} ${a[1]} ${mx} ${b[1]} ${b[0]} ${b[1]}`);
+    p.setAttribute("fill", "none"); p.setAttribute("stroke", ink); p.setAttribute("stroke-width", "3");
+    if (dashed) p.setAttribute("stroke-dasharray", "6 6"); return p; };
+  const kids = [line(center($("nClient"), "r"), center($("nLB"), "l"))];
+  for (const n of NAMES) {
+    const node = $("n-" + n);
+    kids.push(line(center($("nLB"), "r"), center(node, "l"), node.classList.contains("down")));
+  }
+  svg.replaceChildren(...kids);
+}
+function shoot(conn, delay) {
+  const node = $("n-" + conn.backend); if (!node) return;
+  const a = center($("nClient"), "r"), b = center($("nLB"), "l"), c = center($("nLB"), "r"), d = center(node, "l");
+  const p = el("span", { class: "pkt", style: `--c: var(${BACKEND_VARS[conn.backend]})` });
+  $("stage").append(p);
+  const mid = (u, v) => [(u[0] + v[0]) / 2, (u[1] + v[1]) / 2];
+  const tr = (q) => `translate(${q[0]}px, ${q[1]}px)`;
+  const anim = p.animate([
+    { transform: tr(a), opacity: 0 },
+    { transform: tr(mid(a, b)), opacity: 1, offset: 0.2 },
+    { transform: tr(b), offset: 0.42 },
+    { transform: tr(c), offset: 0.55 },
+    { transform: tr([mid(c, d)[0], d[1]]), offset: 0.8 },
+    { transform: tr(d), opacity: 1 },
+  ], { duration: 1100, delay, easing: "cubic-bezier(.45,0,.25,1)", fill: "both" });
+  anim.onfinish = () => { p.remove(); node.classList.remove("hit"); void node.offsetWidth; node.classList.add("hit"); };
+}
+function renderFlow(s) {
+  for (const b of s.backends) $("n-" + b.name)?.classList.toggle("down", b.state === "DOWN");
+  $("nLBTxt").textContent = `:${s.lb.vip.split(":").pop()} · ${ALGO_NAME[s.lb.algo] || s.lb.algo}`;
+  $("nClientTxt").textContent = s.traffic.running ? `live · ${s.traffic.rate} req/s` : "traffic off";
+  layoutWires();
+  const fresh = s.connections.filter(c => !seenConn.has(c.time + c.client)).reverse();   // oldest first
+  for (const c of s.connections) seenConn.add(c.time + c.client);
+  if (seenConn.size > 400) { const keep = [...seenConn].slice(-200); seenConn.clear(); keep.forEach(k => seenConn.add(k)); }
+  if (!flowPrimed) { flowPrimed = true; return; }       // don't replay history on first load
+  if (REDUCED || document.hidden) return;
+  fresh.slice(-14).forEach((c, i, arr) => shoot(c, Math.round(i * 450 / Math.max(1, arr.length))));
+}
+
+/* ---------------- events / connections ---------------- */
+const ICON = { up: "✓", down: "✕", crash: "✕", retry: "↻", drop: "!", info: "•" };
+const seenEvt = new Set(); let evtPrimed = false;
+function renderEvents(evts) {
+  const ul = $("events");
+  if (!evts.length) { ul.replaceChildren(el("li", { class: "empty" }, "No events yet.")); return; }
+  const fresh = [];
+  ul.replaceChildren(...evts.map(e => {
+    const key = e.time + e.msg, isNew = evtPrimed && !seenEvt.has(key);
+    if (isNew) fresh.push(e);
+    seenEvt.add(key);
+    return el("li", { class: isNew ? "new" : "" },
+      el("span", { class: "time" }, e.time),
+      el("span", { class: "ic " + e.kind, title: e.kind }, ICON[e.kind] || "•"),
+      el("span", {}, e.msg));
+  }));
+  evtPrimed = true;
+  fresh.reverse().filter(e => e.kind !== "info").forEach(toast);
+}
+const seenRow = new Set(); let rowPrimed = false;
+function renderConns(conns) {
+  const tb = $("conns");
+  if (!conns.length) { tb.replaceChildren(el("tr", {}, el("td", { colspan: 5, class: "empty" }, "No connections yet. Turn on live traffic or run a burst."))); return; }
+  tb.replaceChildren(...conns.map(c => {
+    const key = c.time + c.client, isNew = rowPrimed && !seenRow.has(key);
+    seenRow.add(key);
+    return el("tr", { class: isNew ? "new" : "" },
+      el("td", { class: "mono" }, c.time.slice(0, 12)),
+      el("td", { class: "mono" }, c.client),
+      el("td", {}, el("span", { class: "tag", style: `--c: var(${BACKEND_VARS[c.backend] || "--muted"})` }, el("span", { class: "swatch" }), c.backend)),
+      el("td", { class: "num" }, `${c.up} / ${c.down}`),
+      el("td", { class: "num" }, c.ms.toFixed(1)));
+  }));
+  rowPrimed = true;
+  if (seenRow.size > 400) { const keep = [...seenRow].slice(-200); seenRow.clear(); keep.forEach(k => seenRow.add(k)); }
+}
+const TOAST_TITLE = { down: "Server marked DOWN", up: "Server back UP", crash: "Process killed", retry: "Request retried", drop: "Request dropped" };
+function toast(e) {
+  const box = $("toasts");
+  const t = el("div", { class: "toast " + e.kind, role: "status" }, el("b", {}, ICON[e.kind] || "•"),
+    el("div", {}, el("div", { style: "font-weight:800" }, TOAST_TITLE[e.kind] || "Event"), el("div", { style: "color:var(--ink-2);font-size:12.5px" }, e.msg)));
+  box.append(t);
+  while (box.children.length > 4) box.firstChild.remove();
+  setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 320); }, 4200);
+}
+
+/* ---------------- burst + clients ---------------- */
+const ALGO_NAME = { rr: "Round robin", least: "Least connections", hash: "Source-IP hash" };
+let lastBurstKey = null;
+function renderBurst(b) {
+  const out = $("burstOut");
+  if (!b) { if (lastBurstKey !== null) { lastBurstKey = null; out.replaceChildren(el("div", { class: "hint" }, "Run the same burst under each algorithm and compare throughput. Least connections avoids the slow web-3.")); } return; }
+  const key = b.time; if (key === lastBurstKey) return; lastBurstKey = key;
+  const maxN = Math.max(1, ...Object.values(b.distribution));
+  const fills = [];
+  const bars = Object.entries(b.distribution).map(([n, v]) => {
+    const f = el("div", { class: "fill" }); fills.push([f, 100 * v / maxN]);
+    return el("div", { class: "bar", style: `--c: var(${BACKEND_VARS[n]})` },
+      el("span", {}, n), el("div", { class: "track" }, f),
+      el("span", { class: "n" }, `${v} (${Math.round(100 * v / Math.max(1, b.ok))}%)`));
+  });
+  const kv = (k, v) => el("div", {}, el("div", { class: "k" }, k), el("div", { class: "v" }, v));
+  out.replaceChildren(
+    el("div", { class: "hint" }, `${ALGO_NAME[b.algo]} · ${b.n} requests, concurrency ${b.c} · ${b.time.slice(0, 8)}`),
+    el("div", { class: "bars" }, ...bars),
+    el("div", { class: "burst-stats" },
+      kv("Throughput", `${b.rps} req/s`),
+      kv("Avg / p95 ms", b.latency_ms ? `${Math.round(b.latency_ms.avg)} / ${Math.round(b.latency_ms.p95)}` : "–"),
+      kv("Failed", String(b.failed))));
+  requestAnimationFrame(() => requestAnimationFrame(() => fills.forEach(([f, w]) => f.style.width = w + "%")));   // bars grow in
+}
+function renderClients(s) {
+  const show = s.lb.algo === "hash";
+  $("clientsCtl").style.display = show ? "" : "none";
+  if (!show) return;
+  $("clientsHint").textContent = s.hash_multi_ip === false
+    ? "This OS only allows 127.0.0.1, so all traffic comes from one client and sticks to one backend."
+    : "Each simulated client IP always lands on the same backend (CRC32 of the IP mod the number of healthy backends).";
+  const rows = s.clients.length ? s.clients.map(c => el("div", {}, el("span", { class: "mono" }, c.ip),
+      el("span", { class: "tag", style: `--c: var(${BACKEND_VARS[c.backend] || "--muted"})` }, el("span", { class: "swatch" }), "→ " + c.backend)))
+    : [el("div", { class: "empty" }, "Turn on live traffic to see the mapping.")];
+  $("clients").replaceChildren(...rows);
+}
+
+/* ---------------- controls (same calls as before) ---------------- */
+for (const b of $("algoSeg").querySelectorAll("button")) {
+  b.onclick = async () => { busy = true; poll(); await post("/api/algo", { algo: b.dataset.algo }); busy = false; poll(); };
+}
+$("trafficSw").onclick = async () => { await post("/api/traffic", { running: !(STATE && STATE.traffic.running) }); poll(); };
+$("rate").oninput = () => { $("rateTxt").textContent = $("rate").value + " req/s"; };
+$("rate").onchange = async () => { await post("/api/traffic", { rate: Number($("rate").value) }); poll(); };
+$("burstBtn").onclick = async () => {
+  const btn = $("burstBtn"); btn.disabled = true; btn.textContent = "Running…"; btn.classList.add("running");
+  try { await post("/api/burst", { n: Number($("bn").value), c: Number($("bc").value) }); }
+  finally { btn.disabled = false; btn.textContent = "Run"; btn.classList.remove("running"); poll(); }
+};
+$("themeBtn").onclick = () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  readColors();
+  if (STATE) render(STATE);
+};
+
+/* ---------------- Wireshark cheat sheet ---------------- */
+const FILTERS = [
+  ["tcp.port == 8080", "Client ↔ balancer leg: SYN, SYN-ACK, ACK, GET (35 B), 200 OK, FIN."],
+  ["tcp.flags.syn == 1 && tcp.flags.ack == 0", "Every new connection: 2 per request (client→LB, LB→backend) + health probes."],
+  ["http.request || http.response", "Same GET appears twice, once per leg. Use Decode As → HTTP for ports 9001-9003."],
+  ["tcp.flags.reset == 1", "After killing a backend: RST, ACK from its port. That's what the health check detects."],
+  ["tcp.dstport == 9002 && tcp.len > 0", "Put in Statistics → I/O Graph: drops to zero at the kill, returns after restart."],
+  ["tcp.stream eq 0", "Right-click → Follow → TCP Stream to read one full request/response."],
+];
+$("filters").replaceChildren(...FILTERS.map(([f, d]) => {
+  const btn = el("button", {}, "Copy");
+  btn.onclick = async () => { try { await navigator.clipboard.writeText(f); btn.textContent = "Copied"; setTimeout(() => btn.textContent = "Copy", 1200); } catch (e) {} };
+  return el("div", { class: "f" }, el("div", { class: "f-top" }, el("code", {}, f), btn), el("p", {}, d));
+}));
+layoutWires();
+</script>
+</body>
+</html>
